@@ -38,7 +38,7 @@ describe.each([
       'src/queue/RunQueue.ts#RunQueue.items',
     ])
     const items = diagnostics.find(({ key }) => key === 'src/queue/RunQueue.ts#RunQueue.items')
-    expect(items?.picture.at(-1)).toBe('  kept: limit')
+    expect(items?.picture.at(-1)).toBe('  kept: limit, options')
   })
 
   it('flags sibling modules that use each other, not a module and its child', () => {

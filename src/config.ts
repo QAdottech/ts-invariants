@@ -45,6 +45,7 @@ export const defaultConfig: Config = {
     '**/coverage/**',
     '**/generated/**',
     '**/*.generated.*',
+    '**/*.gen.*',
     '**/*.d.ts',
     '**/*.d.mts',
     '**/*.d.cts',

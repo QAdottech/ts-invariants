@@ -88,9 +88,10 @@ after    tick() in kernel calls both; Timers no longer knows Tasks
 ### `field-leak`
 
 Code outside a class that works on one of its fields: writes it, or reaches into
-what it holds (calls a method on it, indexes it, reads a member of it), directly
-or through a getter that hands the field out. Reading a field's value is fine:
-whoever reads a value depends on what it is, not on how the class keeps it.
+what it holds (calls a method on it, indexes it, or writes into it), directly or
+through a getter that hands the field out. Reading values out of a field, however
+deep (`env.config.root`), is fine: whoever reads a value depends on what it is,
+not on how the class keeps it.
 
 A class is checked when one of its own methods uses its fields and it keeps at
 least one of them to itself. Its subclasses, and the things in its tangle, count
@@ -141,7 +142,7 @@ Optional, in `ts-invariants.config.json` at the root:
 | Key          | Default                                                                                                                                                                                                 |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `projects`   | Every `tsconfig.json` in the repository, outside `node_modules`, hidden directories, and excluded or test paths. Project references are followed.                                                       |
-| `exclude`    | `node_modules`, `dist`, `build`, `.next`, `coverage`, `generated` directories, `*.generated.*` and `.d.ts` files. Yours are added.                                                                      |
+| `exclude`    | `node_modules`, `dist`, `build`, `.next`, `coverage`, `generated` directories, `*.generated.*`, `*.gen.*` and `.d.ts` files. Yours are added.                                                           |
 | `testFiles`  | `*.test.*`, `*.spec.*`, `*.stories.*`, and `test`, `tests`, `__tests__`, `__mocks__` and `e2e` directories. Test files count for layout, but are neither checked nor counted as users. Yours are added. |
 | `limits`     | As above.                                                                                                                                                                                               |
 | `invariants` | All on. Set one to `"off"` to skip it.                                                                                                                                                                  |

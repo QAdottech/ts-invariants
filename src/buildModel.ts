@@ -65,29 +65,47 @@ const bodyOf = (node: ts.Node): ts.ConciseBody | undefined => {
     : undefined
 }
 
+const isAssigned = (expression: ts.Expression) => {
+  const user = expression.parent
+  if (ts.isBinaryExpression(user) && user.left === expression)
+    return (
+      user.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
+      user.operatorToken.kind <= ts.SyntaxKind.LastAssignment
+    )
+  if (ts.isPrefixUnaryExpression(user) || ts.isPostfixUnaryExpression(user))
+    return (
+      user.operator === ts.SyntaxKind.PlusPlusToken ||
+      user.operator === ts.SyntaxKind.MinusMinusToken
+    )
+  return ts.isDeleteExpression(user)
+}
+
+/**
+ * How `x.field` is used. Reading values out of it, however deep
+ * (`x.config.root`), is a read; indexing it, calling a method on it, or
+ * writing anywhere into it reaches into how the class keeps it.
+ */
 const accessOf = (identifier: ts.Identifier): Access => {
   const access = identifier.parent
   if (!ts.isPropertyAccessExpression(access) || access.name !== identifier) return 'read'
-  const user = access.parent
-  if (ts.isBinaryExpression(user) && user.left === access)
-    return user.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
-      user.operatorToken.kind <= ts.SyntaxKind.LastAssignment
-      ? 'write'
-      : 'read'
-  if (
-    (ts.isPrefixUnaryExpression(user) || ts.isPostfixUnaryExpression(user)) &&
-    (user.operator === ts.SyntaxKind.PlusPlusToken ||
-      user.operator === ts.SyntaxKind.MinusMinusToken)
-  )
-    return 'write'
-  if (ts.isDeleteExpression(user)) return 'write'
-  if (
-    ((ts.isPropertyAccessExpression(user) || ts.isElementAccessExpression(user)) &&
-      user.expression === access) ||
-    (ts.isCallExpression(user) && user.expression === access)
-  )
-    return 'reach'
-  return 'read'
+  if (isAssigned(access)) return 'write'
+  let top: ts.Expression = access
+  for (;;) {
+    const user = top.parent
+    if (
+      (ts.isElementAccessExpression(user) || ts.isCallExpression(user)) &&
+      user.expression === top
+    )
+      return 'reach'
+    if (
+      (ts.isPropertyAccessExpression(user) && user.expression === top) ||
+      ts.isNonNullExpression(user)
+    ) {
+      top = user
+      continue
+    }
+    return top !== access && isAssigned(top) ? 'reach' : 'read'
+  }
 }
 
 const isInImportOrExport = (node: ts.Node): boolean => {
