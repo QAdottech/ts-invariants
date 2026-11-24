@@ -172,7 +172,17 @@ export const buildModel = ({
     const started = Date.now()
     const program = ts.createProgram({
       rootNames: config.fileNames,
-      options: { ...config.options, noEmit: true, incremental: false },
+      // Logging options print to stdout, where they'd corrupt `--format json`.
+      options: {
+        ...config.options,
+        noEmit: true,
+        incremental: false,
+        traceResolution: false,
+        listFiles: false,
+        explainFiles: false,
+        extendedDiagnostics: false,
+        diagnostics: false,
+      },
       projectReferences: config.projectReferences,
     })
     const checker = program.getTypeChecker()
