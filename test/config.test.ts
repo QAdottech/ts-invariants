@@ -35,34 +35,29 @@ describe('globToRegExp', () => {
 })
 
 describe('findProjects', () => {
-  it('reads pnpm workspaces and adds the root', () => {
+  it('finds every tsconfig.json, shallowest first, outside skipped directories', () => {
     const root = workspace({
-      'pnpm-workspace.yaml':
-        "packages:\n  - 'packages/*'\n  - apps/web # the app\n  - '!packages/skip'\n",
       'tsconfig.json': '{}',
       'packages/a/tsconfig.json': '{}',
-      'packages/skip/tsconfig.json': '{}',
-      'packages/no-tsconfig/package.json': '{}',
-      'apps/web/tsconfig.json': '{}',
-    })
-    const found = findProjects({ root, config: defaultConfig }).map((file) =>
-      path.relative(root, file),
-    )
-    expect(found.sort()).toEqual([
-      'apps/web/tsconfig.json',
-      'packages/a/tsconfig.json',
-      'tsconfig.json',
-    ])
-  })
-
-  it('reads npm and yarn workspaces from package.json', () => {
-    const root = workspace({
-      'package.json': JSON.stringify({ workspaces: { packages: ['libs/*'] } }),
-      'libs/core/tsconfig.json': '{}',
+      'packages/a/src/node/tsconfig.json': '{}',
+      'packages/a/test/fixtures/x/tsconfig.json': '{}',
+      'packages/a/dist/tsconfig.json': '{}',
+      'node_modules/dep/tsconfig.json': '{}',
+      '.cache/tsconfig.json': '{}',
     })
     expect(
       findProjects({ root, config: defaultConfig }).map((file) => path.relative(root, file)),
-    ).toEqual(['libs/core/tsconfig.json'])
+    ).toEqual(['tsconfig.json', 'packages/a/tsconfig.json', 'packages/a/src/node/tsconfig.json'])
+  })
+
+  it('takes the projects the config names', () => {
+    const root = workspace({ 'apps/web/tsconfig.json': '{}', 'apps/api/tsconfig.json': '{}' })
+    const config = { ...defaultConfig, projects: ['apps/*/tsconfig.json'] }
+    expect(
+      findProjects({ root, config })
+        .map((file) => path.relative(root, file))
+        .sort(),
+    ).toEqual(['apps/api/tsconfig.json', 'apps/web/tsconfig.json'])
   })
 })
 

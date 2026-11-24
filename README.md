@@ -140,7 +140,7 @@ Optional, in `ts-invariants.config.json` at the root:
 
 | Key          | Default                                                                                                                                                                                                 |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `projects`   | The `tsconfig.json` of each workspace package (pnpm, npm, yarn or bun workspaces), plus the root's.                                                                                                     |
+| `projects`   | Every `tsconfig.json` in the repository, outside `node_modules`, hidden directories, and excluded or test paths. Project references are followed.                                                       |
 | `exclude`    | `node_modules`, `dist`, `build`, `.next`, `coverage`, `generated` directories, `*.generated.*` and `.d.ts` files. Yours are added.                                                                      |
 | `testFiles`  | `*.test.*`, `*.spec.*`, `*.stories.*`, and `test`, `tests`, `__tests__`, `__mocks__` and `e2e` directories. Test files count for layout, but are neither checked nor counted as users. Yours are added. |
 | `limits`     | As above.                                                                                                                                                                                               |

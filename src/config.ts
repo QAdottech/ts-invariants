@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { expandGlob } from './glob.ts'
+import { expandGlob, matcherOf } from './glob.ts'
 
 export const INVARIANTS = [
   'module-cycle',
@@ -128,41 +128,11 @@ export const loadConfig = ({ root, file }: { root: string; file?: string }): Con
   }
 }
 
-/** The `packages:` list of a `pnpm-workspace.yaml`, without a YAML parser. */
-const pnpmWorkspaceGlobs = (text: string) => {
-  const globs: string[] = []
-  let inPackages = false
-  for (const line of text.split('\n')) {
-    if (/^packages:\s*$/.test(line)) {
-      inPackages = true
-      continue
-    }
-    if (!inPackages) continue
-    const entry = /^\s+-\s+['"]?([^'"#]+?)['"]?\s*(#.*)?$/.exec(line)
-    if (entry?.[1]) globs.push(entry[1])
-    else if (/^\S/.test(line)) break
-  }
-  return globs
-}
-
-const packageJsonWorkspaceGlobs = (text: string) => {
-  const parsed: unknown = JSON.parse(text)
-  if (typeof parsed !== 'object' || parsed === null || !('workspaces' in parsed)) return []
-  const { workspaces } = parsed
-  if (isStringArray(workspaces)) return workspaces
-  if (
-    typeof workspaces === 'object' &&
-    workspaces !== null &&
-    'packages' in workspaces &&
-    isStringArray(workspaces.packages)
-  )
-    return workspaces.packages
-  return []
-}
-
 /**
- * The tsconfig of each workspace package (pnpm, npm, yarn or bun), plus the
- * root one; or the config's `projects`.
+ * Every `tsconfig.json` under `root`, shallowest first, outside `node_modules`,
+ * hidden directories and excluded or test paths; or the config's `projects`.
+ * Walking finds what workspace globs miss: solution-style configs, and code
+ * kept under nested tsconfigs (`src/node/tsconfig.json`).
  */
 export const findProjects = ({ root, config }: { root: string; config: Config }) => {
   if (config.projects)
@@ -170,23 +140,23 @@ export const findProjects = ({ root, config }: { root: string; config: Config })
       .flatMap((glob) => expandGlob({ root, glob }))
       .map((project) => path.join(root, project))
 
-  const pnpmWorkspace = path.join(root, 'pnpm-workspace.yaml')
-  const packageJson = path.join(root, 'package.json')
-  const globs = fs.existsSync(pnpmWorkspace)
-    ? pnpmWorkspaceGlobs(fs.readFileSync(pnpmWorkspace, 'utf8'))
-    : fs.existsSync(packageJson)
-      ? packageJsonWorkspaceGlobs(fs.readFileSync(packageJson, 'utf8'))
-      : []
-
-  const excluded = globs
-    .filter((glob) => glob.startsWith('!'))
-    .flatMap((glob) => expandGlob({ root, glob: glob.slice(1) }))
-  const packages = globs
-    .filter((glob) => !glob.startsWith('!'))
-    .flatMap((glob) => expandGlob({ root, glob }))
-    .filter((directory) => !excluded.includes(directory))
-
-  return [...packages, '.']
-    .map((directory) => path.join(root, directory, 'tsconfig.json'))
-    .filter((tsconfig) => fs.existsSync(tsconfig))
+  const isSkipped = (
+    (excluded, test) => (directory: string) =>
+      excluded(`${directory}/x.ts`) || test(`${directory}/x.ts`)
+  )(matcherOf(config.exclude), matcherOf(config.testFiles))
+  const found: string[] = []
+  const walk = (directory: string) => {
+    for (const entry of fs.readdirSync(path.join(root, directory), { withFileTypes: true })) {
+      const relative = directory === '' ? entry.name : `${directory}/${entry.name}`
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith('.') || entry.name === 'node_modules' || isSkipped(relative))
+          continue
+        walk(relative)
+      } else if (entry.name === 'tsconfig.json') found.push(relative)
+    }
+  }
+  walk('')
+  return found
+    .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b))
+    .map((project) => path.join(root, project))
 }
