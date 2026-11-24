@@ -1,0 +1,11 @@
+import { formatKey } from './parts/format'
+
+export const read1 = (key: string) => formatKey(key) + '1'
+export const read2 = (key: string) => formatKey(key) + '2'
+export const read3 = (key: string) => formatKey(key) + '3'
+export const read4 = (key: string) => formatKey(key) + '4'
+export const read5 = (key: string) => formatKey(key) + '5'
+export const read6 = (key: string) => formatKey(key) + '6'
+export const read7 = (key: string) => formatKey(key) + '7'
+export const read8 = (key: string) => formatKey(key) + '8'
+export const read9 = (key: string) => formatKey(key) + '9'

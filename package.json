@@ -1,0 +1,62 @@
+{
+  "name": "ts-invariants",
+  "version": "0.1.0",
+  "description": "Architectural invariants for TypeScript: deep modules, narrow interfaces. Catches module cycles, tangles, field leaks and shallow modules.",
+  "keywords": [
+    "typescript",
+    "linter",
+    "architecture",
+    "static-analysis",
+    "software-design",
+    "modules"
+  ],
+  "license": "MIT",
+  "author": "QA.tech",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QAdottech/ts-invariants.git"
+  },
+  "type": "module",
+  "bin": {
+    "ts-invariants": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "check": "node src/cli.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "@typescript/typescript6": "^6.0.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "prettier": "^3.8.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  },
+  "packageManager": "pnpm@10.29.3"
+}
