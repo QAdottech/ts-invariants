@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import ts from '@typescript/typescript6'
 
+import { callablesOf, type Callable } from './complexity.ts'
 import type { Access, Item, ItemKind, Model, Reference, SourceFile } from './model.ts'
 import type { MemberLookup, NativeMembers } from './nativeMembers.ts'
 
@@ -121,6 +122,7 @@ export const buildModel = ({
   const items = new Map<string, Item>()
   const references: Reference[] = []
   const files: SourceFile[] = []
+  const callables: Callable[] = []
   const walked = new Set<string>()
   const memberNames = new Set<string>()
   /** Class members by `file:end`: the end offset is the same in TS 6's and TS 7's trees. */
@@ -145,13 +147,22 @@ export const buildModel = ({
     return found
   }
 
-  for (const tsconfig of tsconfigs) {
+  // A solution-style tsconfig (`"files": []` with `references`) holds its code
+  // in the projects it references, so those are indexed after it.
+  const queue = tsconfigs.map((tsconfig) => path.resolve(tsconfig))
+  const seen = new Set<string>()
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    const tsconfig = next
+    if (seen.has(tsconfig)) continue
+    seen.add(tsconfig)
     const config = ts.getParsedCommandLineOfConfigFile(
       tsconfig,
       {},
       { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => undefined },
     )
     if (!config) continue
+    for (const reference of config.projectReferences ?? [])
+      queue.push(ts.resolveProjectReferencePath(reference))
     const fresh = config.fileNames.filter((fileName) => {
       const file = relative(fileName)
       return inScope(file) && !walked.has(file)
@@ -187,6 +198,7 @@ export const buildModel = ({
       newlyWalked++
       files.push({ file, lines: sourceFile.getLineStarts().length })
       walkFile({ sourceFile, file })
+      callables.push(...callablesOf({ sourceFile, file }))
     }
     log(
       `${path.relative(root, tsconfig)}: ${newlyWalked} new files in ${((Date.now() - started) / 1000).toFixed(1)}s`,
@@ -486,7 +498,7 @@ export const buildModel = ({
   }
 
   resolveMembers()
-  return { root, items, references, files, packageOf, isTest }
+  return { root, items, references, files, callables, packageOf, isTest }
 
   function resolveMembers() {
     if (!nativeMembers) return

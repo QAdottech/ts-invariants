@@ -152,24 +152,78 @@ Optional, in `ts-invariants.config.json` at the root:
 ts-invariants [path] [options]
 
   [path]                    report only what concerns this path
+  --changed <ref>           report only what concerns files changed since <ref>
+                            (e.g. origin/main), including uncommitted ones
   -p, --project <tsconfig>  index these projects (repeatable)
   -c, --config <file>       config file (default: ts-invariants.config.json)
   --allow <file>            suppress the entries listed in <file>; new ones still fail
   --update-allow <file>     write every current finding to <file> and exit 0
-  --format <format>         text (default), json, or github (workflow annotations)
+  --format <format>         text (default), json, markdown, or github (annotations)
   --summary                 print counts per invariant and directory instead
+  --score                   print the codebase's score instead
   -q, --quiet               no progress on stderr
 ```
 
 Exit codes: `0` no findings, `1` findings, `2` bad usage or config.
 
-### In GitHub Actions
+## Use it from a coding agent
 
-`--format github` puts each finding on the pull request, at the line it's about:
+An agent should check its own change before it calls the work done. `--changed`
+keeps the report to the files the agent touched, and the allow file keeps
+existing debt out of the way:
 
-```yaml
-- run: npx ts-invariants --allow .ts-invariants-allow --format github
+```bash
+npx ts-invariants --changed origin/main --allow .ts-invariants-allow
 ```
+
+[`skills/ts-invariants/SKILL.md`](skills/ts-invariants/SKILL.md) is a ready-made
+[Claude Code skill](https://docs.claude.com/en/docs/claude-code/skills): copy it
+to `.claude/skills/ts-invariants/` in your repository. It tells the agent when to
+run the check and how to fix each finding, without gaming the allow file.
+
+## In CI
+
+Two steps keep a codebase from getting worse, without asking anyone to fix
+everything first:
+
+1. Record today's findings once, and commit the file:
+
+   ```bash
+   npx ts-invariants --update-allow .ts-invariants-allow
+   ```
+
+2. Fail pull requests on new findings, with each one shown at its line, and a
+   summary on the run:
+
+   ```yaml
+   - uses: actions/checkout@v4
+     with:
+       fetch-depth: 0
+   - run: npx ts-invariants --allow .ts-invariants-allow --format github
+   - if: always()
+     run: npx ts-invariants --allow .ts-invariants-allow --format markdown >> "$GITHUB_STEP_SUMMARY"
+   ```
+
+When a pull request fixes a finding, `ts-invariants` says the allow file has
+stale entries; rerun `--update-allow` so the fixed finding can't come back.
+
+## Score
+
+`--score` sums a codebase up in numbers you can compare across repositories, or
+track over time:
+
+```
+files 412, lines 48210, functions 3120
+erosion 0.31  (share of complexity in the 96 functions above 10)
+findings 1.84 per 1,000 lines
+```
+
+**Erosion** is [SlopCodeBench](https://arxiv.org/abs/2603.24755)'s measure of
+structural decay: each function's mass is its cyclomatic complexity × √(lines of
+code), and erosion is the share of all mass that sits in functions with
+complexity above 10. It goes up as logic piles into a few large functions. The
+paper measured 0.34 on human-written repositories, and 0.68 on code written by
+agents iterating on their own work.
 
 ## How it works
 

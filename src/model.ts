@@ -1,5 +1,7 @@
 import path from 'node:path'
 
+import type { Callable } from './complexity.ts'
+
 export type ItemKind =
   | 'module-scope'
   | 'function'
@@ -55,6 +57,7 @@ export type Model = {
   items: Map<string, Item>
   references: Reference[]
   files: SourceFile[]
+  callables: Callable[]
   /** The directory of the nearest `package.json`, `.` for the root. */
   packageOf: (file: string) => string
   isTest: (file: string) => boolean

@@ -29,7 +29,7 @@ describe.each([
       config: defaultConfig,
       projects,
       nativeMembers: useNative ? native : undefined,
-    })
+    }).diagnostics
   }, 120_000)
 
   it('flags fields that outsiders write or reach into, and keeps fields they only read', () => {
@@ -65,7 +65,7 @@ describe('configuration', () => {
       root,
       config: { ...defaultConfig, invariants: { 'field-leak': 'off' } },
       projects,
-    })
+    }).diagnostics
     expect(keysOf(diagnostics, 'field-leak')).toEqual([])
     expect(keysOf(diagnostics, 'module-cycle')).not.toEqual([])
   })
@@ -78,8 +78,20 @@ describe('configuration', () => {
         limits: { ...defaultConfig.limits, mostInMind: 9, mostLines: 10 },
       },
       projects,
-    })
+    }).diagnostics
     expect(keysOf(diagnostics, 'shallow-module')).toEqual([])
     expect(keysOf(diagnostics, 'long-file')).toContain('src/store/index.ts')
+  })
+})
+
+describe('a solution-style tsconfig', () => {
+  it('indexes the projects it references', () => {
+    const solution = path.join(import.meta.dirname, 'fixtures/solution')
+    const { diagnostics } = check({
+      root: solution,
+      config: defaultConfig,
+      projects: [path.join(solution, 'tsconfig.json')],
+    })
+    expect(keysOf(diagnostics, 'module-cycle')).toEqual(['lib/src ping.ts pong.ts'])
   })
 })

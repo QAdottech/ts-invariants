@@ -3,11 +3,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 
+import { changedFiles } from './changedFiles.ts'
 import { check } from './check.ts'
 import { ConfigError, INVARIANTS, loadConfig } from './config.ts'
 import { formatDiagnostic, type Diagnostic } from './diagnostic.ts'
 import { isInside } from './model.ts'
 import { loadNativeMembers } from './nativeMembers.ts'
+import { formatScore } from './score.ts'
 
 const usage = `usage: ts-invariants [path] [options]
 
@@ -15,13 +17,17 @@ Checks a TypeScript codebase for deep modules and narrow interfaces:
 ${INVARIANTS.join(', ')}.
 
   [path]                    report only what concerns this path
+  --changed <ref>           report only what concerns files changed since <ref>
+                            (e.g. origin/main), including uncommitted ones
   -p, --project <tsconfig>  index these projects (repeatable); default: every
                             workspace package's tsconfig.json, and the root's
   -c, --config <file>       config file (default: ts-invariants.config.json)
   --allow <file>            suppress the entries listed in <file>; new ones still fail
   --update-allow <file>     write every current finding to <file> and exit 0
-  --format <format>         text (default), json, or github (workflow annotations)
+  --format <format>         text (default), json, markdown, or github (annotations)
   --summary                 print counts per invariant and directory instead
+  --score                   print the codebase's score (erosion, findings per
+                            1,000 lines) instead; with --format json, as JSON
   -q, --quiet               no progress on stderr
   -h, --help                show this help
   -v, --version             show the version
@@ -73,6 +79,30 @@ const githubAnnotation = (diagnostic: Diagnostic) => {
   return `::error ${properties}::${escaped}`
 }
 
+/** One collapsible section per finding, for a pull request comment or a job summary. */
+const markdownReport = (diagnostics: Diagnostic[]) => {
+  if (diagnostics.length === 0) return '### ts-invariants\n\nNo findings.'
+  const counts = new Map<string, number>()
+  for (const { invariant } of diagnostics) counts.set(invariant, (counts.get(invariant) ?? 0) + 1)
+  return [
+    `### ts-invariants: ${diagnostics.length} finding${diagnostics.length === 1 ? '' : 's'}`,
+    '',
+    [...counts].map(([invariant, count]) => `\`${invariant}\` ${count}`).join(' · '),
+    '',
+    ...diagnostics.map((diagnostic) =>
+      [
+        `<details><summary><code>${diagnostic.invariant}</code> ${diagnostic.message.replace(/`([^`]+)`/g, '<code>$1</code>')}</summary>`,
+        '',
+        '```',
+        formatDiagnostic(diagnostic),
+        '```',
+        '',
+        '</details>',
+      ].join('\n'),
+    ),
+  ].join('\n')
+}
+
 const version = () => {
   const packageJson: unknown = JSON.parse(
     fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
@@ -89,9 +119,11 @@ const main = async (): Promise<number> => {
       project: { type: 'string', short: 'p', multiple: true },
       config: { type: 'string', short: 'c' },
       allow: { type: 'string' },
+      changed: { type: 'string' },
       'update-allow': { type: 'string' },
       format: { type: 'string', default: 'text' },
       summary: { type: 'boolean' },
+      score: { type: 'boolean' },
       quiet: { type: 'boolean', short: 'q' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
@@ -106,7 +138,7 @@ const main = async (): Promise<number> => {
     return 0
   }
   const format = values.format
-  if (format !== 'text' && format !== 'json' && format !== 'github') {
+  if (format !== 'text' && format !== 'json' && format !== 'markdown' && format !== 'github') {
     console.error(`ts-invariants: unknown --format ${format}\n\n${usage}`)
     return 2
   }
@@ -123,16 +155,24 @@ const main = async (): Promise<number> => {
     log('typescript 7 not found: resolving members with TS 6, which is slower on large projects')
 
   const projects = values.project?.map((project) => path.resolve(project))
+  const changed = values.changed ? changedFiles({ root, ref: values.changed }) : undefined
+  const isChanged = (diagnostic: Diagnostic) =>
+    !changed ||
+    diagnostic.concerns.some((concern) =>
+      [...changed].some((file) => isInside({ outer: concern, inner: file })),
+    )
 
-  const all = check({
+  const report = check({
     root,
     config,
     projects,
     nativeMembers,
     log: (message) => log(`indexed ${message}`),
-  }).filter(
+  })
+  const all = report.diagnostics.filter(
     (diagnostic) =>
-      !scope || diagnostic.concerns.some((concern) => isInside({ outer: scope, inner: concern })),
+      isChanged(diagnostic) &&
+      (!scope || diagnostic.concerns.some((concern) => isInside({ outer: scope, inner: concern }))),
   )
 
   if (values['update-allow']) {
@@ -144,8 +184,14 @@ const main = async (): Promise<number> => {
   const allowed = values.allow ? readAllowList(values.allow) : new Set<string>()
   const diagnostics = all.filter((diagnostic) => !allowed.has(idOf(diagnostic)))
 
-  if (values.summary) console.log(summarize(diagnostics))
-  else if (format === 'json') console.log(JSON.stringify(diagnostics, null, 2))
+  if (values.score)
+    console.log(
+      format === 'json' ? JSON.stringify(report.score, null, 2) : formatScore(report.score),
+    )
+  else if (values.summary) console.log(summarize(diagnostics))
+  else if (format === 'json')
+    console.log(JSON.stringify({ score: report.score, findings: diagnostics }, null, 2))
+  else if (format === 'markdown') console.log(markdownReport(diagnostics))
   else if (format === 'github')
     for (const diagnostic of diagnostics) console.log(githubAnnotation(diagnostic))
   else for (const diagnostic of diagnostics) console.log(`${formatDiagnostic(diagnostic)}\n`)
